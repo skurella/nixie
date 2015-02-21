@@ -39,7 +39,7 @@ Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
 
 ; set up Timer0
 ; display switch frequency: (10 Mhz / 4) / 64 / 2^8 = 152.6 Hz
-        movlw   B'01000101'     ; Timer Off, 8bit, internal clock, prescaler 1:64
+        movlw   B'01000101'     ; Timer off, 8bit, internal clock, prescaler 1:64
         movwf   T0CON
         bsf     INTCON, TMR0IE  ; Enable overflow interrupt
         bsf     INTCON2, TMR0IP ; High interrupt priority
@@ -54,11 +54,7 @@ L1      bra     L1              ; loop forever
 
 
 
-HighInt movff   STATUS, STATUS_TEMP	;save STATUS register
-		movff   WREG, WREG_TEMP		;save working register
-		movff   BSR, BSR_TEMP		;save BSR register
-
-        btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
+HighInt btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
         bra     HIntRet
 
         bcf     INTCON, TMR0IF  ; clear Timer0 overflow flag
@@ -69,18 +65,37 @@ HighInt movff   STATUS, STATUS_TEMP	;save STATUS register
         bra     RDisp
 
         ; handle left display
-        movlw   B'01001100'     ; set RF output values - display '2'
+        ;movlw   B'01001100'     ; set RF output values - display '2'
+        movlw   4
+        CALL    BCDTable
         movwf   LATF
         bra     HIntRet
 
         ; handle right display
-RDisp   movlw   B'01100100'     ; set RF output values - display '3'
+RDisp   ;movlw   B'01100100'     ; set RF output values - display '3'
+        movlw   7
+        CALL    BCDTable
         movwf   LATF
 
-HIntRet movff   BSR_TEMP, BSR		;restore BSR register
-		movff	WREG_TEMP, WREG		;restore working register
-		movff	STATUS_TEMP, STATUS	;restore STATUS register
+HIntRet retfie FAST
 
-        retfie FAST
+
+; BCDTable is a lookup table which converts BCD to RF config
+; in order to display this digit on 7-segment display
+
+BCDTable    movf    PCL, F      ; update PC registers
+            rlncf   WREG, W        ; multiply by 2 to get the correct offset
+            addwf   PCL         ; Add offset to force jump into table
+            retlw   B'10000100' ; '0'
+            retlw   B'11110101' ; '1'
+            retlw   B'01001100' ; '2'
+            retlw   B'01100100' ; '3'
+            retlw   B'00110101' ; '4'
+            retlw   B'00100110' ; '5'
+            retlw   B'00000110' ; '6'
+            retlw   B'11110100' ; '7'
+            retlw   B'00000100' ; '8'
+            retlw   B'00100100' ; '9'
+
 
         end
