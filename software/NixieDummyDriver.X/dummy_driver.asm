@@ -11,46 +11,76 @@
         config      OSC=HS, WDT=OFF, LVP=OFF
         radix       decimal
 
+        CBLOCK	0x080
+		WREG_TEMP	;variable used for context saving
+		STATUS_TEMP	;variable used for context saving
+		BSR_TEMP	;variable used for context saving
+		ENDC
+
 ; reset vector - this is the entry point of the program
-        ORG         0x0000
-        goto        Main
+        ORG     0x0000
+        goto    Init
 
 ; high priority interrupt vector
-        ORG         0x0008
-        BTG         LATH, 1         ; toggle Q1 - switch U2 on or off
-        BCF         INTCON, TMR0IF  ; clear Timer0 overflow flag
-        MOVLW       0x67            ; Set initial timer value to have 1 sec left
-        MOVWF       TMR0H           ; TODO: restore WREG!
-        MOVLW       0x69
-        MOVWF       TMR0L
-        retfie
+        ORG     0x0008
 
-Main    BCF         TRISH, 0        ; set RH0 as output - Q1 transistor
-        BCF         TRISH, 1        ; set RH1 as output - Q2 transistor
-        BCF         LATH, 0         ; pull RH0 value low - enable U1
-        BSF         LATH, 1         ; pull RH1 value high - disable U2
+        bra     HighInt
 
-        MOVLW       B'01100100'     ; set RF output values - display '3'
-        MOVWF       LATF
-        MOVLW       0               ; set RF as output
-        MOVWF       TRISF
+; initialize the microcontroller
+Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
+        bcf     TRISH, 1        ; set RH1 as output - Q2 transistor
+        bcf     LATH, 0         ; pull RH0 value low - enable U1
+        bsf     LATH, 1         ; pull RH1 value high - disable U2
+
+        movlw   B'11111111'     ; set RF output values - all segments off
+        movwf   LATF
+        movlw   0               ; set RF as output
+        movwf   TRISF
 
 ; set up Timer0
-        MOVLW       B'00000101'     ; Timer Off, 16bit, internal clock, prescaler 1:64
-        MOVWF       T0CON
-        MOVLW       0x67            ; Set initial timer value to have 1 sec left
-        MOVWF       TMR0H
-        MOVLW       0x69
-        MOVWF       TMR0L
-        BSF         INTCON, TMR0IE  ; Enable overflow interrupt
-        BSF         INTCON2, TMR0IP ; High interrupt priority
+; display switch frequency: (10 Mhz / 4) / 64 / 2^8 = 152.6 Hz
+        movlw   B'01000101'     ; Timer Off, 8bit, internal clock, prescaler 1:64
+        movwf   T0CON
+        bsf     INTCON, TMR0IE  ; Enable overflow interrupt
+        bsf     INTCON2, TMR0IP ; High interrupt priority
 
-        BSF         RCON, IPEN      ; Enable interrupt priority
-        BSF         INTCON, GIE     ; Enable high-priority interrupts
-        BSF         T0CON, TMR0ON   ; Start Timer0
+        bsf     RCON, IPEN      ; Enable interrupt priority
+        bsf     INTCON, GIE     ; Enable high-priority interrupts
+        bsf     T0CON, TMR0ON   ; Start Timer0
 
 
 
-L1      BRA         L1              ; loop forever
+L1      bra     L1              ; loop forever
+
+
+
+HighInt movff   STATUS, STATUS_TEMP	;save STATUS register
+		movff   WREG, WREG_TEMP		;save working register
+		movff   BSR, BSR_TEMP		;save BSR register
+
+        btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
+        bra     HIntRet
+
+        bcf     INTCON, TMR0IF  ; clear Timer0 overflow flag
+
+        btg     LATH, 0         ; toggle Q1 - switch U1 on or off
+        btg     LATH, 1         ; toggle Q2 - switch U2 on or off
+        btfss   LATH, 0         ; check which display is to be switched on
+        bra     RDisp
+
+        ; handle left display
+        movlw   B'01001100'     ; set RF output values - display '2'
+        movwf   LATF
+        bra     HIntRet
+
+        ; handle right display
+RDisp   movlw   B'01100100'     ; set RF output values - display '3'
+        movwf   LATF
+
+HIntRet movff   BSR_TEMP, BSR		;restore BSR register
+		movff	WREG_TEMP, WREG		;restore working register
+		movff	STATUS_TEMP, STATUS	;restore STATUS register
+
+        retfie FAST
 
         end
