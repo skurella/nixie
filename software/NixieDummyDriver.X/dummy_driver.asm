@@ -11,10 +11,20 @@
         config      OSC=HS, WDT=OFF, LVP=OFF
         radix       decimal
 
-        CBLOCK	0x080
-        WREG_TEMP	;variable used for context saving
-        STATUS_TEMP	;variable used for context saving
-        BSR_TEMP	;variable used for context saving
+        CBLOCK	0x0A
+
+        HoursT      ; tens digit of current hour
+        HoursU      ; units digit of current hour
+        MinutesT    ; tens digit of current minute
+        MinutesU    ; units digit of current minute
+
+        LDispValue  ; digit to be displayed on right display
+        RDispValue  ; digit to be displayed on right display
+
+        WREG_TEMP	; variables used for context saving
+        STATUS_TEMP
+        BSR_TEMP
+
         ENDC
 
 ; reset vector - this is the entry point of the program
@@ -28,7 +38,7 @@
 
 ; low priority interrupt vector
         ORG     0x0018
-        goto     LowInt
+        goto    LowInt
 
 ; initialize the microcontroller
 Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
@@ -40,6 +50,25 @@ Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
         movwf   LATF
         movlw   0               ; set RF as output
         movwf   TRISF
+
+        bsf     TRISJ, 5        ; set RJ5 as input - PB1
+        bsf     TRISB, 0        ; set RB0 as input - PB2
+
+        movlw   B'00111100'     ; set RC2,3,4,5 as inputs - SW1h
+        iorwf   TRISC
+        movlw   B'11110000'     ; set RH4,5,6,7 as inputs - SW1l
+        iorwf   TRISH
+
+; set up initial time value
+        movlw   2
+        movwf   HoursT
+        movwf   HoursU
+        movlw   3
+        movwf   MinutesT
+        movwf   MinutesU
+
+; initially display hours
+        CALL    DispH
 
 ; set up Timer0
 ; display switch frequency: (10 Mhz / 4) / 64 / 2^8 = 152.6 Hz
@@ -53,8 +82,17 @@ Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
         bsf     INTCON, PEIE    ; Enable low-priority interrupts
         bsf     T0CON, TMR0ON   ; Start Timer0
 
+; main loop
+; continuously monitor push-buttons and toggle switches
+MLoop   ; TODO
+        btfss   PORTB, 0        ; set hours if PB2 is pressed
+        CALL    DispH
+        btfss   PORTJ, 5        ; set minures if PB1 is pressed
+        CALL    DispM
 
-L1      bra     L1              ; loop forever
+        bra     MLoop           ; execute main loop forever
+
+
 
 
 ; low priority interrupt saves and restores working registers
@@ -74,21 +112,38 @@ LowInt  movff   STATUS, STATUS_TEMP	;save STATUS register
         bra     RDisp
 
         ; handle left display
-        movlw   8               ; set RF output values - display '8'
-        CALL    BCDTable
-        movwf   LATF
+        movff   LDispValue, LATF
         bra     LIntRet
 
         ; handle right display
-RDisp   movlw   2               ; set RF output values - display '2'
-        CALL    BCDTable
-        movwf   LATF
+RDisp   movff   RDispValue, LATF
 
 LIntRet movff   BSR_TEMP, BSR		;restore BSR register
         movff	WREG_TEMP, WREG		;restore working register
         movff	STATUS_TEMP, STATUS	;restore STATUS register
 
         retfie
+
+
+
+; this subroutine places Hours [BCD] in DispValue registers [7seg]
+DispH   movf    HoursT, W       ; convert BCD to 7seg
+        CALL    BCDTable
+        movwf   LDispValue      ; place tens in left display
+        movf    HoursU, W
+        CALL    BCDTable
+        movwf   RDispValue      ; place units in right display
+        return
+
+; this subroutine places Minutes [BCD] in DispValue registers [7seg]
+DispM   movf    MinutesT, W       ; convert BCD to 7seg
+        CALL    BCDTable
+        movwf   LDispValue      ; place tens in left display
+        movf    MinutesU, W
+        CALL    BCDTable
+        movwf   RDispValue      ; place units in right display
+        return
+
 
 
 ; BCDTable is a lookup table which converts BCD to RF config
