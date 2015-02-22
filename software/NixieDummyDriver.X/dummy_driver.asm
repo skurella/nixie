@@ -24,7 +24,12 @@
 ; high priority interrupt vector
         ORG     0x0008
 
-        bra     HighInt
+        retfie  FAST
+
+; low priority interrupt vector
+        ORG     0x0018
+
+        bra     LowInt
 
 ; initialize the microcontroller
 Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
@@ -42,10 +47,11 @@ Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
         movlw   B'01000101'     ; Timer off, 8bit, internal clock, prescaler 1:64
         movwf   T0CON
         bsf     INTCON, TMR0IE  ; Enable overflow interrupt
-        bsf     INTCON2, TMR0IP ; High interrupt priority
+        bcf     INTCON2, TMR0IP ; Low interrupt priority
 
         bsf     RCON, IPEN      ; Enable interrupt priority
         bsf     INTCON, GIE     ; Enable high-priority interrupts
+        bsf     INTCON, PEIE    ; Enable low-priority interrupts
         bsf     T0CON, TMR0ON   ; Start Timer0
 
 
@@ -54,8 +60,8 @@ L1      bra     L1              ; loop forever
 
 
 
-HighInt btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
-        bra     HIntRet
+LowInt  btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
+        bra     LIntRet
 
         bcf     INTCON, TMR0IF  ; clear Timer0 overflow flag
 
@@ -66,18 +72,18 @@ HighInt btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
 
         ; handle left display
         ;movlw   B'01001100'     ; set RF output values - display '2'
-        movlw   4
+        movlw   8
         CALL    BCDTable
         movwf   LATF
-        bra     HIntRet
+        bra     LIntRet
 
         ; handle right display
 RDisp   ;movlw   B'01100100'     ; set RF output values - display '3'
-        movlw   7
+        movlw   2
         CALL    BCDTable
         movwf   LATF
 
-HIntRet retfie FAST
+LIntRet retfie FAST
 
 
 ; BCDTable is a lookup table which converts BCD to RF config
