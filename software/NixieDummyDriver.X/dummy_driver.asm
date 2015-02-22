@@ -12,10 +12,10 @@
         radix       decimal
 
         CBLOCK	0x080
-		WREG_TEMP	;variable used for context saving
-		STATUS_TEMP	;variable used for context saving
-		BSR_TEMP	;variable used for context saving
-		ENDC
+        WREG_TEMP	;variable used for context saving
+        STATUS_TEMP	;variable used for context saving
+        BSR_TEMP	;variable used for context saving
+        ENDC
 
 ; reset vector - this is the entry point of the program
         ORG     0x0000
@@ -23,13 +23,12 @@
 
 ; high priority interrupt vector
         ORG     0x0008
-
+        ; high-p int code goes here
         retfie  FAST
 
 ; low priority interrupt vector
         ORG     0x0018
-
-        bra     LowInt
+        goto     LowInt
 
 ; initialize the microcontroller
 Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
@@ -55,12 +54,16 @@ Init    bcf     TRISH, 0        ; set RH0 as output - Q1 transistor
         bsf     T0CON, TMR0ON   ; Start Timer0
 
 
-
 L1      bra     L1              ; loop forever
 
 
+; low priority interrupt saves and restores working registers
+; because FAST stack is used by high priority interrupts
+LowInt  movff   STATUS, STATUS_TEMP	;save STATUS register
+        movff   WREG, WREG_TEMP		;save working register
+        movff   BSR, BSR_TEMP		;save BSR register
 
-LowInt  btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
+        btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
         bra     LIntRet
 
         bcf     INTCON, TMR0IF  ; clear Timer0 overflow flag
@@ -71,19 +74,21 @@ LowInt  btfss   INTCON, TMR0IF      ; branch if Timer0 not OV
         bra     RDisp
 
         ; handle left display
-        ;movlw   B'01001100'     ; set RF output values - display '2'
-        movlw   8
+        movlw   8               ; set RF output values - display '8'
         CALL    BCDTable
         movwf   LATF
         bra     LIntRet
 
         ; handle right display
-RDisp   ;movlw   B'01100100'     ; set RF output values - display '3'
-        movlw   2
+RDisp   movlw   2               ; set RF output values - display '2'
         CALL    BCDTable
         movwf   LATF
 
-LIntRet retfie FAST
+LIntRet movff   BSR_TEMP, BSR		;restore BSR register
+        movff	WREG_TEMP, WREG		;restore working register
+        movff	STATUS_TEMP, STATUS	;restore STATUS register
+
+        retfie
 
 
 ; BCDTable is a lookup table which converts BCD to RF config
@@ -104,4 +109,4 @@ BCDTable    movf    PCL, F      ; update PC registers
             retlw   B'00100100' ; '9'
 
 
-        end
+        END
