@@ -40,6 +40,8 @@
 #include <stdlib.h>
 
 #include "nixie.h"
+#include "i2c.h"
+#include "encoder.h"
 
 
 int main(int argc, char** argv) {
