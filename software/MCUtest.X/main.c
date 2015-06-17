@@ -34,7 +34,7 @@
 #pragma config LVP = OFF        // Low-Voltage Programming Enable (High-voltage on MCLR/VPP must be used for programming)
 
 
-#define _XTAL_FREQ  16000000
+#define _XTAL_FREQ  500000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,34 +43,34 @@
 #include "i2c.h"
 #include "encoder.h"
 
+volatile int number = 1234;
+
+char display[4];
+
+void interrupt tc_int() {
+    if (TMR2IE && TMR2IF) {
+        TMR2IF = 0;
+        ++current_tube;
+        current_tube %= 4;
+        
+        PORTA = display[current_tube];
+        return;
+    }
+}
 
 int main(int argc, char** argv) {
+    // Set internal oscillator to 16 Mhz
+    //OSCCONbits.IRCF = 0b1111;
 
-    OSCCONbits.IRCF = 0b1111;   // internal oscillator - 16 Mhz
-
+    // Initialize peripherals
     ANSELC = 0;
     TRISC0 = 0; // set RC0 as output (blue LED)
     TRISC1 = 0; // set RC1 as output (red LED)
-
     RC0 = 0;
     RC1 = 0;
-
     TRISC2 = 1; // set RC2 as input (SW1)
 
-    ANSELA = 0;
-    LATA = 0;
-    TRISA = 0; // anodes and digits as digital outputs
-    RA0 = 0;   // anode1
-    RA1 = 0;   // anode2
-    RA6 = 0;   // anode4
-    RA7 = 0;   // anode3
-
-    // Invalid digit (0xF)
-    RA4 = 1;   // digit4
-    RA3 = 1;   // digit3
-    RA2 = 1;   // digit2
-    RA5 = 1;   // digit1
-
+    nixie_init();
 
     encoder_init();
 
@@ -78,15 +78,30 @@ int main(int argc, char** argv) {
     rtc_start();
     rtc_vbat_enable();
     
+    // Enable interrupts
+    ei();
+
     while (1) {
-        PORTA = 0b00000001 | 0b00100000;    // '1' on tube 1
-        __delay_ms(1);
-        PORTA = 0b00000010 | 0b00000100;    // '2' on tube 2
-        __delay_ms(1);
-        PORTA = 0b10000000 | 0b00100100;    // '3' on tube 3
-        __delay_ms(1);
-        PORTA = 0b01000000 | 0b00001000;    // '4' on tube 4
-        __delay_ms(1);
+        switch (encoder_updateState()) {
+            case ENCODER_TURN_CLOCKWISE:
+                ++number;
+                number %= 10000;
+                display[0] = tube[0] | digit[(number / 1000) % 10];
+                display[1] = tube[1] | digit[(number / 100) % 10];
+                display[2] = tube[2] | digit[(number / 10) % 10];
+                display[3] = tube[3] | digit[number % 10];
+                break;
+            case ENCODER_TURN_COUNTERCLOCKWISE:
+                if (number == 0) {
+                    number = 10000;
+                }
+                --number;
+                display[0] = tube[0] | digit[(number / 1000) % 10];
+                display[1] = tube[1] | digit[(number / 100) % 10];
+                display[2] = tube[2] | digit[(number / 10) % 10];
+                display[3] = tube[3] | digit[number % 10];
+                break;
+        }
     }
 
     return (EXIT_SUCCESS);
