@@ -8,8 +8,7 @@
 #include <xc.h>
 #include "nixie.h"
 
-volatile unsigned char ENCODER_STATE;
-volatile unsigned char I2C_STATE;
+volatile char ENCODER_STATE;
 
 // Init encoder inputs
 void encoder_init() {
@@ -17,7 +16,7 @@ void encoder_init() {
     // RB3 - encoder PB
     // RB4 - encoder B
     // RB5 - encoder A
-    OPTION_REGbits.nRBPU = 0;   // enable port B weak pull-up
+    OPTION_REGbits.nWPUEN = 0;   // enable port B weak pull-up
     ANSELB &= 0b11000111;       // make RB3..5 digital
     WPUB3 = 1;                  // pull RB3 to VCC
     WPUB4 = 0;                  // disable RB4..5 pull-up (external is used)
@@ -124,115 +123,131 @@ unsigned char encoder_updateState() {
     return ENCODER_TURN_NOTURN;
 }
 
+
+char I2C_DATA[8];
+
 // Init I2C
 void i2c_init() {
-    // Disable SSP module
-    SSPCONbits.SSPEN = 0;
     
-    // Clear output latches
-    //I2C_DATA_PIN = 0; // for some reason these do not work as expected
-    //I2C_CLOCK_PIN = 0;
+    // I2C Master Mode
+    SSPCON1 = 0b00001000;
+
+    /// Set Baud Rate Generator to 100kHz from 16MHz
+    // 100 kHz = 16 MHz / (39 + 1)
+    SSPADD = 39;
+
+    // Enable SSP module
+    SSPCON1bits.SSPEN = 1;
+
+    // Clear the flags
+    SSPIF = 0;
+    WCOL = 0;
+    SSPOV = 0;
+
+    // Set both lines as inputs
+    TRISC3 = 1;
+    TRISC4 = 1;
     RC3 = 0;
     RC4 = 0;
 
-    // Set both lines (idle)
-    I2C_DATA_SET;
-    I2C_CLOCK_SET;
-
-    I2C_STATE = I2C_STATE_IDLE;
-
-    // Configure Timer0
-    OPTION_REGbits.T0CS = 0; // Timer0 clock source: instruction cycle clock
-    OPTION_REGbits.PSA = 1; // assign prescaler to watchdog
+    // Disable slew rate limiting
+    SSPSTAT = 0b10000000;
 }
 
-// I2C delay (minimum 5us = 10 instruction cycles)
-// Timer0 is used to handle interrupts
-inline void i2c_delay() {
-    i2c_begindelay();
-    i2c_enddelay();
+// Delay until an I2C interrupt flag is set
+void i2c_awaitIR(){
+    // Wait for action to finish
+    while (!PIR1bits.SSPIF);
+    // Clear interrupt in software
+    PIR1bits.SSPIF = 0;
 }
 
-inline void i2c_begindelay() {
-    TMR0 = 0;
-    INTCONbits.TMR0IF = 0;
-}
-
-inline void i2c_enddelay() {
-    while (TMR0 < 10 && !INTCONbits.TMR0IF);
-}
-
+// I2C bus control
 void i2c_start() {
-    // If I2C is already started, do a restart
-    if (I2C_STATE != I2C_STATE_IDLE) {
-        I2C_DATA_SET;
-        i2c_delay();
-        I2C_CLOCK_SET;
-        while (I2C_CLOCK_PIN == 0); // clock stretching
-        i2c_delay();
-    }
-
-    I2C_DATA_CLEAR;
-    i2c_delay();
-    I2C_CLOCK_CLEAR;
-
-    I2C_STATE = I2C_STATE_ACTIVE;
+    SSPCON2bits.SEN = 1;
+    i2c_awaitIR();
 }
 
 void i2c_stop() {
-    I2C_DATA_CLEAR;
-    i2c_delay();
-    I2C_CLOCK_SET;
-    while (I2C_CLOCK_PIN == 0); // clock stretching
-    i2c_delay();
-    I2C_DATA_SET;
-    i2c_delay();
-
-    I2C_STATE = I2C_STATE_IDLE;
+    SSPCON2bits.PEN = 1;
+    i2c_awaitIR();
 }
 
-void i2c_write_bit(char b) {
-    if (b) {
-        I2C_DATA_SET;
-    } else {
-        I2C_DATA_CLEAR;
+void i2c_restart() {
+    SSPCON2bits.RSEN = 1;
+    i2c_awaitIR();
+}
+
+// Main I2C functions
+char i2c_send_byte(char byte) {
+    SSPBUF = byte;
+    i2c_awaitIR();
+
+    return !SSPCON2bits.ACKSTAT;
+}
+
+char i2c_rec_byte() {
+    SSPCON2bits.RCEN = 1;
+    i2c_awaitIR();
+
+    return SSPBUF;
+}
+
+void i2c_ack() {
+    SSPCON2bits.ACKDT = 0;
+    SSPCON2bits.ACKEN = 1;
+    i2c_awaitIR();
+}
+
+void i2c_nack() {
+    SSPCON2bits.ACKDT = 1;
+    SSPCON2bits.ACKEN = 1;
+    i2c_awaitIR();
+}
+
+// RTC specific functions
+void rtc_write(char addr, char *bytes, int num) {
+    i2c_start();
+    // Send the slave address
+    i2c_send_byte(RTC_WRITE_ADDR);
+    // Send the SRAM address
+    i2c_send_byte(addr);
+    // Send the SRAM data
+    for (int i = 0; i < num; ++i) {
+        i2c_send_byte(bytes[i]);
     }
-    i2c_delay();
-    I2C_CLOCK_SET;
-    while (I2C_CLOCK_PIN == 0); // clock stretching
-    // SCL is high, data is valid
-    i2c_delay();
-    I2C_CLOCK_CLEAR;
+    i2c_stop();
 }
 
-char i2c_read_bit() {
-    char b;
-    I2C_DATA_SET;
-    i2c_delay();
-    I2C_CLOCK_SET;
-    while (I2C_CLOCK_PIN == 0); // clock stretching
-    // SCL is high, data is valid
-    b = I2C_DATA_PIN;
-    i2c_delay();
-    I2C_CLOCK_CLEAR;
-    return b;
-}
-
-// Returns 0 if acknowledged by the slave
-char i2c_write_byte(char byte) {
-    for (char i = 0; i < 8; ++i) {
-        i2c_write_bit((byte & 0x80) != 0);
-        byte <<= 1;
+void rtc_read(char addr, int num) {
+    i2c_start();
+    // Send the slave address
+    i2c_send_byte(RTC_WRITE_ADDR);
+    // Send the SRAM address
+    i2c_send_byte(addr);
+    i2c_restart();
+    i2c_send_byte(RTC_READ_ADDR);
+    // Receive the SRAM data
+    for (int i = 0; i < num; ++i) {
+        I2C_DATA[i] = i2c_rec_byte();
+        // Acknowledge every byte but the last
+        if (i < num - 1) {
+            i2c_ack();
+        } else {
+            i2c_nack();
+        }
     }
-    return i2c_read_bit();
+    i2c_stop();
 }
 
-char i2c_read_byte(char nack) {
-    char byte = 0;
-    for (char i = 0; i < 8; ++i) {
-        byte = (byte << 1) | i2c_read_bit();
-    }
-    i2c_write_bit(nack);
-    return byte;
+void rtc_start() {
+    rtc_read(0x00, 1);
+    I2C_DATA[0] |= 0b10000000;
+    rtc_write(0x00, I2C_DATA, 1);
 }
 
+void rtc_vbat_enable() {
+    rtc_read(0x03, 1);
+    I2C_DATA[0] |= 0b00001000;
+    rtc_write(0x03, I2C_DATA, 1);
+}

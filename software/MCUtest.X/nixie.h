@@ -26,7 +26,7 @@ extern "C" {
 #define ENCODER_TURN_CLOCKWISE          1
 #define ENCODER_TURN_COUNTERCLOCKWISE   2
 
-extern volatile unsigned char ENCODER_STATE;
+extern volatile char ENCODER_STATE;
 
 // Init encoder inputs
 void encoder_init();
@@ -45,37 +45,45 @@ inline void encoder_setState(unsigned char state);
 unsigned char encoder_updateState();
 
 
+typedef struct {
+    char secone;
+    char secten;
+    char minone;
+    char minten;
+    char hrone;
+    char hrten;
+} time_t;
 
-#define I2C_DATA_OUTPUT    TRICSbits.TRISC4;
-#define I2C_DATA_CLEAR     TRISCbits.TRISC4 = 0; // pull SDA low
-#define I2C_DATA_SET       TRISCbits.TRISC4 = 1; // let SDA high
-#define I2C_DATA_PIN       RC4         // SDA pin
+#define RTC_WRITE_ADDR      0b11011110
+#define RTC_READ_ADDR       0b11011111
+#define EEPROM_WRITE_ADDR   0b10101110
+#define EEPROM_READ_ADDR    0b10101111
 
-#define I2C_CLOCK_OUTPUT   TRISCbits.TRISC3;
-#define I2C_CLOCK_CLEAR    TRISCbits.TRISC3 = 0; // pull SCL low
-#define I2C_CLOCK_SET      TRISCbits.TRISC3 = 1; // let SCL high
-#define I2C_CLOCK_PIN      RC3         // SCL pin
 
-#define I2C_STATE_IDLE      0
-#define I2C_STATE_ACTIVE    1
-
-extern volatile unsigned char I2C_STATE;
+extern char I2C_DATA[8];
 
 // Init I2C
 void i2c_init();
 
-// I2C delay (minimum 5us)
-// Timer0 is used in order to handle interrupts
-inline void i2c_delay();
-inline void i2c_begindelay();
-inline void i2c_enddelay();
+// Delay until an I2C interrupt flag is set
+void i2c_awaitIR();
 
+// I2C bus control
 void i2c_start();
 void i2c_stop();
-void i2c_write_bit(char b);
-char i2c_read_bit();
-char i2c_write_byte(char byte); // Returns 0 if acknowledged by the slave
-char i2c_read_byte(char nack);
+void i2c_restart();
+
+// Main I2C functions
+char i2c_send_byte(char byte);
+char i2c_rec_byte();
+void i2c_ack();
+void i2c_nack();
+
+// RTC specific functions
+void rtc_write(char addr, char *bytes, int num);
+void rtc_read(char addr, int num);
+void rtc_start();
+void rtc_vbat_enable();
 
 #ifdef	__cplusplus
 }
