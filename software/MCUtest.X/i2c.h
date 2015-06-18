@@ -53,6 +53,19 @@ void rtc_read(char addr, int num);
 void rtc_start();
 void rtc_vbat_enable();
 
+char rtc_get_sec();
+void rtc_set_sec(char sec);
+char rtc_get_min();
+void rtc_set_min(char hour);
+char rtc_get_hour();
+void rtc_set_hour(char hour);
+
+void rtc_alm0_set_sec(char sec);
+void rtc_alm0_set_mask(char mask);
+char rtc_alm0_get_flag();
+void rtc_alm0_clear_flag();
+void rtc_alm0_enable();
+
 
 #ifdef	__cplusplus
 }

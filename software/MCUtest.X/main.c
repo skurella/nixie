@@ -58,9 +58,16 @@ void interrupt tc_int() {
     }
 }
 
+void update_display() {
+    display[0] = tube[0] | digit[(number / 1000) % 10];
+    display[1] = tube[1] | digit[(number / 100) % 10];
+    display[2] = tube[2] | digit[(number / 10) % 10];
+    display[3] = tube[3] | digit[number % 10];
+}
+
 int main(int argc, char** argv) {
-    // Set internal oscillator to 16 Mhz
-    //OSCCONbits.IRCF = 0b1111;
+    // Set internal oscillator to 1 Mhz
+    //OSCCONbits.IRCF = 0b1011;
 
     // Initialize peripherals
     ANSELC = 0;
@@ -77,31 +84,26 @@ int main(int argc, char** argv) {
     i2c_init();
     rtc_start();
     rtc_vbat_enable();
+
+    TRISC5 = 1; // RTC MFP - input
     
     // Enable interrupts
     ei();
 
+    update_display();
+    char hour = 0, min = 0;
+
+    rtc_alm0_set_sec(0);
+    rtc_alm0_set_mask(0b000);
+    rtc_alm0_enable();
+
     while (1) {
-        switch (encoder_updateState()) {
-            case ENCODER_TURN_CLOCKWISE:
-                ++number;
-                number %= 10000;
-                display[0] = tube[0] | digit[(number / 1000) % 10];
-                display[1] = tube[1] | digit[(number / 100) % 10];
-                display[2] = tube[2] | digit[(number / 10) % 10];
-                display[3] = tube[3] | digit[number % 10];
-                break;
-            case ENCODER_TURN_COUNTERCLOCKWISE:
-                if (number == 0) {
-                    number = 10000;
-                }
-                --number;
-                display[0] = tube[0] | digit[(number / 1000) % 10];
-                display[1] = tube[1] | digit[(number / 100) % 10];
-                display[2] = tube[2] | digit[(number / 10) % 10];
-                display[3] = tube[3] | digit[number % 10];
-                break;
-        }
+        hour = rtc_get_hour();
+        display[0] = tube[0] | digit[(hour & 0x70) >> 4];
+        display[1] = tube[1] | digit[hour & 0x0F];
+        min = rtc_get_min();
+        display[2] = tube[2] | digit[(min & 0x70) >> 4];
+        display[3] = tube[3] | digit[min & 0x0F];
     }
 
     return (EXIT_SUCCESS);

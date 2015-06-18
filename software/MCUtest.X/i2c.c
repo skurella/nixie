@@ -135,3 +135,64 @@ void rtc_vbat_enable() {
     I2C_DATA[0] |= 0b00001000;
     rtc_write(0x03, I2C_DATA, 1);
 }
+
+char rtc_get_sec() {
+    rtc_read(0x00, 1);
+    I2C_DATA[0] &= 0x7F;    // mask ST bit
+    return I2C_DATA[0];
+}
+
+void rtc_set_sec(char sec) {
+    I2C_DATA[0] = sec;
+    rtc_write(0x00, I2C_DATA, 1);
+}
+
+char rtc_get_min() {
+    rtc_read(0x01, 1);
+    return I2C_DATA[0];
+}
+void rtc_set_min(char min) {
+    I2C_DATA[0] = min;
+    rtc_write(0x01, I2C_DATA, 1);
+}
+
+char rtc_get_hour() {
+    rtc_read(0x02, 1);
+    if (I2C_DATA[0] & 0x40) {   // if 12 hours are used
+        return I2C_DATA[0] & 0x1F;  // mask AM/PM bit
+    } else {
+        return I2C_DATA[0] & 0x3F;  // include HRTEN1 bit
+    }
+}
+void rtc_set_hour(char hour) {
+    I2C_DATA[0] = hour;
+    rtc_write(0x02, I2C_DATA, 1);
+}
+
+void rtc_alm0_set_sec(char sec) {
+    I2C_DATA[0] = sec;
+    rtc_write(0x0A, I2C_DATA, 1);
+}
+
+void rtc_alm0_set_mask(char mask) {
+    rtc_read(0x0D, 1);
+    I2C_DATA[0] &= 0x8F;    // mask the ALM0MSK bits
+    I2C_DATA[0] |= (mask << 4);
+    rtc_write(0x0D, I2C_DATA, 1);
+}
+
+char rtc_alm0_get_flag() {
+    rtc_read(0x0D, 1);
+    return (I2C_DATA[0] & 0x08) >> 3;
+}
+void rtc_alm0_clear_flag() {
+    rtc_read(0x0D, 1);
+    I2C_DATA[0] &= 0xF7;    // mask the ALM0IF bit
+    rtc_write(0x0D, I2C_DATA, 1);
+}
+
+void rtc_alm0_enable() {
+    rtc_read(0x07, 1);    // read CONTROL register
+    I2C_DATA[0] |= 0x10;    // set the ALM0EN bit
+    rtc_write(0x07, I2C_DATA, 1);
+}
