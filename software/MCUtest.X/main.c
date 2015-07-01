@@ -5,6 +5,9 @@
  * Created on 22.05.2015, 16:42
  */
 
+#include "peripherals.h"
+
+
 // PIC16F1518 Configuration Bit Settings
 
 // 'C' source line config statements
@@ -34,7 +37,7 @@
 #pragma config LVP = OFF        // Low-Voltage Programming Enable (High-voltage on MCLR/VPP must be used for programming)
 
 
-#define _XTAL_FREQ  500000
+#define _XTAL_FREQ  1000000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,39 +46,66 @@
 #include "i2c.h"
 #include "encoder.h"
 
-volatile int number = 1234;
+#define CLOCK_STATE_IDLE    0   // display the time
+#define CLOCK_STATE_SETHOUR 1   // set hours of the time
+#define CLOCK_STATE_SETMIN  2   // set minutes of the time
+#define CLOCK_STATE_ALARM   3   // sound the alarm
+#define CLOCK_STATE_ALMHOUR 4   // set hours of alarm
+#define CLOCK_STATE_ALMMIN  5   // set minutes of alarm
+#define CLOCK_STATE_CAL     6   // calibrate the clock
+#define CLOCK_STATE_VOLTAGE 7   // display HT voltage
 
-char display[4];
+volatile char clock_state = CLOCK_STATE_IDLE;
+volatile unsigned int ui_timer = 0;
+char encoder_pressed = 0;
+char button_pressed = 0;
 
 void interrupt tc_int() {
-    if (TMR2IE && TMR2IF) {
-        TMR2IF = 0;
-        ++current_tube;
-        current_tube %= 4;
+    while (1) {
+        if (TMR0IE && TMR0IF) {
+            TMR0IF = 0;
+            ++current_tube;
+            current_tube %= 4;
+
+            PORTA = display[current_tube];
+            continue;
+        }
+
+        if (TMR2IE && TMR2IF) {
+            TMR2IF = 0;
+            ++ui_timer;
+            if (ui_timer == 60000) { // count max to one minute
+                ui_timer = 0;
+            }
+
+            continue;
+        }
         
-        PORTA = display[current_tube];
         return;
     }
 }
 
-void update_display() {
-    display[0] = tube[0] | digit[(number / 1000) % 10];
-    display[1] = tube[1] | digit[(number / 100) % 10];
-    display[2] = tube[2] | digit[(number / 10) % 10];
-    display[3] = tube[3] | digit[number % 10];
+void Timer2_init() {
+    // Initialize Timer2
+    // Prescaler 1:4, postscaler 1:2
+    // Refresh frequency 400Hz when counting to 250
+    // (1 Mhz / 1) / (250 * 10 * 4) = 100 Hz
+
+    T2CONbits.T2CKPS = 0b00;    // prescaler
+    T2CONbits.T2OUTPS = 10;      // postscaler
+
+    TMR2IF = 0;
+    TMR2IE = 1;
+    PEIE = 1;
+    PR2 = 250;
+    TMR2ON = 1;
 }
 
-int main(int argc, char** argv) {
+int main() {
     // Set internal oscillator to 1 Mhz
-    //OSCCONbits.IRCF = 0b1011;
+    OSCCONbits.IRCF = 0b1011;
 
-    // Initialize peripherals
-    ANSELC = 0;
-    TRISC0 = 0; // set RC0 as output (blue LED)
-    TRISC1 = 0; // set RC1 as output (red LED)
-    RC0 = 0;
-    RC1 = 0;
-    TRISC2 = 1; // set RC2 as input (SW1)
+    peripherals_init();
 
     nixie_init();
 
@@ -85,25 +115,49 @@ int main(int argc, char** argv) {
     rtc_start();
     rtc_vbat_enable();
 
-    TRISC5 = 1; // RTC MFP - input
+    // Clear the display
+    nixie_clear();
+
+    // Start asynchronous timer
+    Timer2_init();
     
     // Enable interrupts
     ei();
 
-    update_display();
     char hour = 0, min = 0;
 
-    rtc_alm0_set_sec(0);
-    rtc_alm0_set_mask(0b000);
-    rtc_alm0_enable();
-
+    // Main loop
     while (1) {
-        hour = rtc_get_hour();
-        display[0] = tube[0] | digit[(hour & 0x70) >> 4];
-        display[1] = tube[1] | digit[hour & 0x0F];
-        min = rtc_get_min();
-        display[2] = tube[2] | digit[(min & 0x70) >> 4];
-        display[3] = tube[3] | digit[min & 0x0F];
+
+        switch (clock_state) {
+            case CLOCK_STATE_IDLE:
+                // TODO: check HT voltage for changes
+                // TODO: check encoder button for short or long press
+
+                hour = rtc_get_hour();
+                nixie_display(0, (hour & 0x70) >> 4);
+                nixie_display(1, hour & 0x0F);
+                min = rtc_get_min();
+                nixie_display(2, (min & 0x70) >> 4);
+                nixie_display(3, min & 0x0F);
+                break;
+
+            case CLOCK_STATE_SETHOUR:
+                break;
+            case CLOCK_STATE_SETMIN:
+                break;
+            case CLOCK_STATE_ALARM:
+                break;
+            case CLOCK_STATE_ALMHOUR:
+                break;
+            case CLOCK_STATE_ALMMIN:
+                break;
+            case CLOCK_STATE_CAL:
+                break;
+            case CLOCK_STATE_VOLTAGE:
+                break;
+        }
+        
     }
 
     return (EXIT_SUCCESS);

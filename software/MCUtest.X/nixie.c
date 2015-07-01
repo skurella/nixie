@@ -10,21 +10,34 @@
 
 volatile char current_tube = 0;
 
+volatile char display[4];
+
 void nixie_init() {
     // anodes and digits as digital outputs
     ANSELA = 0;
     TRISA = 0;
     PORTA = inv_digit;
 
-    // Initialize Timer2
-    // Prescaler 1:4, postscaler 1:10
-    // Refresh frequency 400Hz when counting to 250
-    // (16 Mhz / 4) / (250 * 10 * 4) = 400 Hz
-    T2CON = T2CKPS0;                // prescaler
-    T2CON |= T2OUTPS3 | T2OUTPS0;   // postscaler
-    TMR2IF = 0;
-    PEIE = 1;
-    TMR2IE = 1;                     // enable interrupts
-    PR2 = 250;                      // Timer2 Period Register
-    TMR2ON = 1;                     // start Timer2
+    
+    OPTION_REGbits.PS = 1;  // Timer0 prescaler 1:2^(PS+1)
+    OPTION_REGbits.T0CS = 0;    // Clock Source - instruction clock
+    OPTION_REGbits.PSA = 0;     // assign prescaler to Timer0
+    TMR0IF = 0;
+    TMR0IE = 1;
+    PEIE = 1;                   // enable interrupts
+}
+
+void nixie_display(char tube, char digit) {
+    tube %= 4;
+    if (digit > 9) {
+        display[tube] = nixie_tube[tube] | inv_digit;
+    } else {
+        display[tube] = nixie_tube[tube] | nixie_digit[digit];
+    }
+}
+
+void nixie_clear() {
+    for (char i = 0; i < 4; ++i) {
+        nixie_display(10, i);
+    }
 }

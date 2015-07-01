@@ -12,7 +12,11 @@
 extern "C" {
 #endif
 
-const char digit[10] = {
+#include <xc.h>
+
+#define RTC_MFP RC5
+
+const char nixie_digit[10] = {
     0b00000000, // 0
     0b00100000, // 1
     0b00000100, // 2
@@ -27,7 +31,7 @@ const char digit[10] = {
 
 const char inv_digit = 0b00111100;
 
-const char tube[4] = {
+const char nixie_tube[4] = {
     0b00000001, // tube 1
     0b00000010, // tube 2
     0b10000000, // tube 3
@@ -36,7 +40,13 @@ const char tube[4] = {
 
 extern volatile char current_tube;
 
+extern volatile char display[4];
+
 void nixie_init();
+
+void nixie_display(char num, char tube);
+
+void nixie_clear();
 
 #ifdef	__cplusplus
 }
