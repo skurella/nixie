@@ -46,10 +46,10 @@ inline void red_led_off() {
     RC1 = 0;
 }
 
-inline char encoder_switch_state() {
+inline char encoder_button_state() {
     return !RB3;
 }
 
-inline char switch_state() {
+inline char button_state() {
     return !RC2;
 }

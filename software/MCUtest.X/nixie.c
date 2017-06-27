@@ -19,7 +19,7 @@ void nixie_init() {
     PORTA = inv_digit;
 
     
-    OPTION_REGbits.PS = 1;  // Timer0 prescaler 1:2^(PS+1)
+    OPTION_REGbits.PS = 1;      // Timer0 prescaler 1:2^(PS+1)
     OPTION_REGbits.T0CS = 0;    // Clock Source - instruction clock
     OPTION_REGbits.PSA = 0;     // assign prescaler to Timer0
     TMR0IF = 0;

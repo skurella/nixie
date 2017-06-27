@@ -24,9 +24,9 @@ inline void blue_led_off();
 inline void red_led_on();
 inline void red_led_off();
 
-inline char encoder_switch_state();
+inline char encoder_button_state();
 
-inline char switch_state();
+inline char button_state();
 
 
 #ifdef	__cplusplus
